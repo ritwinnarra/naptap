@@ -26,7 +26,8 @@ for line in open(os.path.join(D, "cities15000.txt"), encoding="utf-8"):
     f = line.rstrip("\n").split("\t")
     pop = int(f[14] or 0)
     if f[7] not in KEEP: continue
-    (rows if pop >= MIN_POP else small).append({"name": f[1], "lat": float(f[4]), "lon": float(f[5]), "cc": f[8],
+    names = {f[1].lower(), f[2].lower(), *(a.lower() for a in f[3].split(","))}
+    (rows if pop >= MIN_POP else small).append({"name": f[1], "names": names, "lat": float(f[4]), "lon": float(f[5]), "cc": f[8],
                  "country": countries.get(f[8], f[8]), "region": admin1.get(f[8] + "." + f[10], ""), "pop": pop})
 
 def km(a, b):
@@ -34,13 +35,18 @@ def km(a, b):
     s = math.sin((la2 - la1) / 2) ** 2 + math.cos(la1) * math.cos(la2) * math.sin((lo2 - lo1) / 2) ** 2
     return 6371 * 2 * math.asin(math.sqrt(s))
 
-# attach the curated facts: nearest GeoNames city within 40 km keeps the curated name, country and note
+# attach the curated facts. Within 40 km, prefer a GeoNames row that carries the curated name (in any language),
+# else the most populous row within 25 km; the nearest row alone picked suburbs over the city itself.
 curated = json.load(open(os.path.join(ROOT, "data", "curated.json"), encoding="utf-8"))
 unmatched = 0
 for name, country, lat, lon, note in curated:
     c = {"lat": lat, "lon": lon}
-    best = min(rows, key=lambda r: km(r, c))
-    if km(best, c) <= 40:
+    near = [r for r in rows if km(r, c) <= 40 and not r.get("curated")]
+    named = [r for r in near if name.lower() in r["names"]]
+    pool = named or [r for r in near if km(r, c) <= 25]
+    best = max(pool, key=lambda r: r["pop"]) if pool else None
+    if best:
+        if not named: print(f"matched by distance only: {name} -> {best['name']} ({best['pop']:,}, {km(best, c):.0f} km)")
         best.update(name=name, country=country, note=note, curated=True)
     else:  # a curated town under 100k: keep it, taking its population from the smaller GeoNames places if it is there
         unmatched += 1

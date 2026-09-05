@@ -272,12 +272,15 @@ const globe = new THREE.Mesh(new THREE.SphereGeometry(R, 96, 64), new THREE.Mesh
 earth.add(globe);
 
 // Detail layers. Everything ships inside the page, but GPU memory on phones is finite, so each layer keeps only the
-// tiles near the current view resident and disposes the rest as you move: 32 tiles of 2048px (16k equirect, ≈2.4 km/px),
+// tiles near the current view resident and disposes the rest as you move. All layers sit at the globe's own radius and
+// paint over each other in order without depth testing: stacking them at growing radii looked the same but put the
+// picture you see up to 0.35% above the sphere the tap ray is tested against, which at full zoom moved taps near the
+// screen edges by tens of pixels. 32 tiles of 2048px (16k equirect, ≈2.4 km/px),
 // then 512px patches at ≈1.2 km/px over every lit region, then 2.25° tiles at ≈490 m/px (NASA GIBS
 // VIIRS_CityLights_2012, its finest level) over the same regions, used only when zoomed right in.
 const texLoader = new THREE.TextureLoader();
-function makeLayer(group, items, radius, segs, opts){
-  const L={group, radius, segs, ...opts, items: items.map(it=>{
+function makeLayer(group, items, order, segs, opts){
+  const L={group, order, segs, ...opts, items: items.map(it=>{
     const c=latLonToVec3((it.lat0+it.lat1)/2,(it.lon0+it.lon1)/2).normalize();
     const corner=latLonToVec3(it.lat0,it.lon0).normalize();
     return {...it, c, half: Math.max(c.angleTo(corner), c.angleTo(latLonToVec3(it.lat1,it.lon0).normalize())), mesh:null, loading:false};
@@ -288,8 +291,8 @@ function loadItem(L, it){
   it.loading=true; L.busy++;
   texLoader.load(it.src, tx=>{
     tx.anisotropy=renderer.capabilities.getMaxAnisotropy(); tx.minFilter=THREE.LinearMipmapLinearFilter;
-    const geo=new THREE.SphereGeometry(L.radius, L.segs, L.segs, (it.lon0+180)*DEG, (it.lon1-it.lon0)*DEG, (90-it.lat1)*DEG, (it.lat1-it.lat0)*DEG);
-    it.mesh=new THREE.Mesh(geo, new THREE.MeshBasicMaterial({map:tx})); L.group.add(it.mesh);
+    const geo=new THREE.SphereGeometry(R, L.segs, L.segs, (it.lon0+180)*DEG, (it.lon1-it.lon0)*DEG, (90-it.lat1)*DEG, (it.lat1-it.lat0)*DEG);
+    it.mesh=new THREE.Mesh(geo, new THREE.MeshBasicMaterial({map:tx, depthTest:false, depthWrite:false})); it.mesh.renderOrder=L.order; L.group.add(it.mesh);
     it.loading=false; L.busy--;
   }, undefined, ()=>{ it.loading=false; L.busy--; });
 }
@@ -321,9 +324,9 @@ const fine=new THREE.Group(); earth.add(fine);
 const layers=[];
 if(renderer.capabilities.maxTextureSize>=2048 && HI_TILES.length===32){
   const items=[]; for(let j=0;j<4;j++) for(let i=0;i<8;i++) items.push({lon0:-180+i*45, lon1:-135+i*45, lat0:90-(j+1)*45, lat1:90-j*45, src:HI_TILES[j*8+i]});
-  layers.push(makeLayer(hiShell, items, R*1.0015, 24, {maxDist:99, loadPad:0.15, unloadPad:0.6, cap:16}));
-  layers.push(makeLayer(detail, Z7.map(z=>({lon0:z[0],lon1:z[1],lat0:z[2],lat1:z[3],src:z[4]})), R*1.0025, 10, {maxDist:2.6, loadPad:0.08, unloadPad:0.35, cap:70}));
-  layers.push(makeLayer(fine, Z8.map(z=>({lon0:z[0],lon1:z[1],lat0:z[2],lat1:z[3],src:z[4]})), R*1.0035, 6, {maxDist:1.35, loadPad:0.03, unloadPad:0.18, cap:48}));
+  layers.push(makeLayer(hiShell, items, 1, 24, {maxDist:99, loadPad:0.15, unloadPad:0.6, cap:16}));
+  layers.push(makeLayer(detail, Z7.map(z=>({lon0:z[0],lon1:z[1],lat0:z[2],lat1:z[3],src:z[4]})), 2, 10, {maxDist:2.6, loadPad:0.08, unloadPad:0.35, cap:70}));
+  layers.push(makeLayer(fine, Z8.map(z=>({lon0:z[0],lon1:z[1],lat0:z[2],lat1:z[3],src:z[4]})), 3, 6, {maxDist:1.35, loadPad:0.03, unloadPad:0.18, cap:48}));
 }
 let lastLayerT=0;
 function tickLayers(now){ if(now-lastLayerT<250) return; lastLayerT=now; layers.forEach(updateLayer); }
@@ -344,11 +347,11 @@ function makePin(color, r=0.014){
   const g=new THREE.Group();
   const dot=new THREE.Mesh(new THREE.CircleGeometry(r,32), new THREE.MeshBasicMaterial({color,side:THREE.DoubleSide}));
   const ring=new THREE.Mesh(new THREE.RingGeometry(r*1.6,r*2.1,40), new THREE.MeshBasicMaterial({color,transparent:true,opacity:.55,side:THREE.DoubleSide}));
-  dot.rotation.x=-Math.PI/2; dot.position.y=0.003; ring.rotation.x=-Math.PI/2; ring.position.y=0.002;
+  dot.rotation.x=-Math.PI/2; ring.rotation.x=-Math.PI/2; dot.renderOrder=ring.renderOrder=10; // after the imagery shells
   g.add(dot,ring); return g;
 }
 function placePin(pin, lat, lon){
-  const p=latLonToVec3(lat,lon,R*1.004);
+  const p=latLonToVec3(lat,lon,R*1.0006); // just clear of the base mesh's facets, which dip below R between vertices
   pin.position.copy(p);
   pin.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), p.clone().normalize());
 }
@@ -432,7 +435,13 @@ function flyTo(lat, lon, dist){
 // ---------- Input ----------
 const ray=new THREE.Raycaster();
 function screenToNdc(x,y){ const r=canvas.getBoundingClientRect(); return new THREE.Vector2(((x-r.left)/r.width)*2-1, -((y-r.top)/r.height)*2+1); }
-function hitGlobe(x,y){ ray.setFromCamera(screenToNdc(x,y),camera); const h=ray.intersectObject(globe)[0]; return h ? vec3ToLatLon(earth.worldToLocal(h.point.clone())) : null; }
+// Exact ray/sphere test against the true sphere, not the faceted mesh (whose facets dip below R between vertices)
+function hitGlobe(x,y){
+  ray.setFromCamera(screenToNdc(x,y),camera); const o=ray.ray.origin, d=ray.ray.direction; const tc=-o.dot(d);
+  const q=o.clone().add(d.clone().multiplyScalar(tc)); const rho2=q.lengthSq(); if(tc<0 || rho2>R*R) return null;
+  const p=q.sub(d.clone().multiplyScalar(Math.sqrt(R*R-rho2)));
+  return vec3ToLatLon(p.applyQuaternion(earth.quaternion.clone().invert()));
+}
 // What the pointer is "holding" on the globe: a unit direction (world space) plus the geometry needed to keep a drag
 // going off the globe. Inside 80% of the disc that is the surface point under the pointer. Grabbing the true surface
 // out to the limb makes the turn rate blow up at the edge and stop dead beyond it, so past that radius the grab angle
@@ -617,7 +626,8 @@ function frame(now){
   else if(!dragging && spin.rate>1e-6){ rotateBy(spin.axis, Math.min(0.25, spin.rate*16)); levelNorth(0.5); spin.rate*=0.93; if(spin.rate<2e-5) spin.rate=0; }
   else if(autoSpin && !dragging){ rotateBy(Y_AXIS, 0.0008); }
   // pulse rings
-  const s=1+0.12*Math.sin(now/300); const ps=Math.max(0.3,Math.min(1,(camDist-1)/(FIT_D-1))); [guessPin,truthPin].forEach(p=>{ if(p.visible){ p.scale.setScalar(ps); p.children[1].scale.set(s,s,1);} });
+  // markers keep a constant size on screen (7px dot, ring out to ~15px) whatever the zoom
+  const s=1+0.12*Math.sin(now/300); const ps=7*radPerPx()/0.014; [guessPin,truthPin].forEach(p=>{ if(p.visible){ p.scale.setScalar(ps); p.children[1].scale.set(s,s,1);} });
   // tag position
   if(truthPin.visible){
     const v=truthPin.getWorldPosition(new THREE.Vector3()); const facing = v.clone().normalize().z>0.15;

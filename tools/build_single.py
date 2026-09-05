@@ -16,6 +16,7 @@ def uri(rel):
 html = open(os.path.join(ROOT, "index.html")).read()
 three = open(os.path.join(ROOT, "vendor", "three.min.js")).read()
 app = open(os.path.join(ROOT, "app.js")).read()
+cities_js = open(os.path.join(ROOT, "cities.js")).read()
 z7 = json.load(open(os.path.join(T, "z7.json")))
 z8 = json.load(open(os.path.join(T, "z8.json"))) if os.path.exists(os.path.join(T, "z8.json")) else []
 cities = json.load(open(os.path.join(T, "cities.json")))
@@ -44,6 +45,7 @@ parts.append("  z8: [" + ",".join(chosen) + "]\n};")
 
 html = re.sub(r'<script src="vendor/three.min.js"></script>', lambda _: "<script>" + three + "</script>", html)
 html = re.sub(r'<script src="tiles/manifest.js"></script>', lambda _: "<script>" + "\n".join(parts) + "</script>", html)
+html = re.sub(r'<script src="cities.js"></script>', lambda _: "<script>" + cities_js + "</script>", html)
 html = re.sub(r'<script src="app.js"></script>', lambda _: "<script>" + app + "</script>", html)
 os.makedirs(os.path.join(ROOT, "dist"), exist_ok=True)
 out = os.path.join(ROOT, "dist", "nightfall.html")

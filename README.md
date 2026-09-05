@@ -4,6 +4,14 @@ A clone of [maptap.gg](https://maptap.gg) played on the Earth at night. Five cit
 
 The imagery is NASA's 2012 VIIRS day/night band composite (the classic "Black Marble"), so every city is lit wherever you look.
 
+## Cities
+
+`cities.js` holds every city with a population of 100,000 or more: 5,800 or so, from the [GeoNames](https://www.geonames.org/) `cities15000` dump (CC BY 4.0). Boroughs and districts of larger cities are left out, and a city whose name also belongs to another one gets its state or province in the country line. About 200 of them carry a hand-written fact from `data/curated.json`; the rest show their population. Rebuild with
+
+    python3 tools/build_cities.py <dir with cities15000.txt, countryInfo.txt, admin1CodesASCII.txt>
+
+after downloading those three files from https://download.geonames.org/export/dump/.
+
 ## Running it
 
 It's a static site. Serve the folder and open `index.html`:
@@ -32,6 +40,7 @@ The z8 layer is NASA GIBS `VIIRS_CityLights_2012` at its finest level (EPSG:4326
 - `tools/fetch_z8.py` pulls the level-7 tiles from GIBS for every area the z7 patches cover.
 - `tools/pack_z8.py` drops the dark ones and converts the rest to WebP.
 - `tools/manifest.py` writes `tiles/manifest.js`.
+- `tools/build_cities.py` builds `cities.js` from the GeoNames dump.
 - `tools/build_single.py` inlines everything into `dist/nightfall.html` for hosts that block external files (claude.ai artifacts, for one). Pass a size budget in MB; it keeps the z8 tiles nearest the game cities first.
 
 Needs Python 3 with Pillow and NumPy.

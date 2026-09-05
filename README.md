@@ -6,19 +6,23 @@ The imagery is NASA's 2012 VIIRS day/night band composite (the classic "Black Ma
 
 ## Cities
 
-`cities.js` holds every city with a population of 100,000 or more: 5,800 or so, from the [GeoNames](https://www.geonames.org/) `cities15000` dump (CC BY 4.0). Boroughs and districts of larger cities are left out, and a city whose name also belongs to another one gets its state or province in the country line. About 200 of them carry a hand-written fact from `data/curated.json`; the rest show their population. Rebuild with
+The game draws from `cities.js`, about 1,360 notable places, built from the [GeoNames](https://www.geonames.org/) dumps (CC BY 4.0) by `tools/build_cities.py`. A place is in if any of these hold:
 
-    python3 tools/build_cities.py <dir with cities15000.txt, countryInfo.txt, admin1CodesASCII.txt>
+- population of 1 million or more
+- a national capital
+- a state or province capital of 400k or more, or of any size in the US, Canada, Australia, India and Brazil
+- one of the 200 or so cities in `data/curated.json`, which carry hand-written facts
+- listed in `data/notable.json`: places that are famous out of proportion to their size, from Oakland and Lake Tahoe to Petra and Tirumala. Most are looked up in GeoNames by name; a few dozen that aren't cities at all are given with coordinates.
 
-after downloading those three files from https://download.geonames.org/export/dump/.
+Picks are weighted by population^(2/3), with a floor of 300k so the small famous places still come up.
 
-## Running it
+The full list of every city over 100k (5,854 of them) is kept in `data/cities_100k.js` with the same format. To use it instead, point the script tag in `index.html` at it.
 
-It's a static site. Serve the folder and open `index.html`:
+Boroughs and districts of larger cities are excluded. Cities in China, Russia, India, Brazil, Australia and Indonesia show their province or state, and so does any city that shares its name with another. Rebuild with
 
-    python3 -m http.server 8000
+    python3 tools/build_cities.py <dir with cities15000.txt, cities500.txt, countryInfo.txt, admin1CodesASCII.txt>
 
-Opening the file directly won't work because the browser blocks texture loads from `file://`.
+after downloading those files from https://download.geonames.org/export/dump/.
 
 ## How the imagery is layered
 

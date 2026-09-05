@@ -1,6 +1,9 @@
-"""Build cities.js: every city with population >= 100,000 from GeoNames (cities15000 dump, CC BY 4.0,
-https://download.geonames.org/export/dump/), merged with the hand-written facts in data/curated.json.
-Usage: build_cities.py <dir containing cities15000.txt, countryInfo.txt, admin1CodesASCII.txt>"""
+"""Build the city lists from GeoNames (CC BY 4.0, https://download.geonames.org/export/dump/).
+  data/cities_100k.js  every city with population >= 100,000 (cities15000 dump)
+  cities.js            the notable ones the game uses: population >= 1M, national capitals, state/province capitals
+                       (>= 400k, or any size in US/CA/AU/IN/BR), the curated cities in data/curated.json, and the
+                       hand list in data/notable.json (looked up in cities500, or given with coordinates)
+Usage: build_cities.py <dir containing cities15000.txt, cities500.txt, countryInfo.txt, admin1CodesASCII.txt>"""
 import json, math, os, sys
 from collections import Counter
 
@@ -10,6 +13,7 @@ D = sys.argv[1]
 MIN_POP = 100_000
 # PPLX = section of a city (boroughs, wards), PPLH/PPLQ = historical or abandoned, PPLL/PPLS = localities and clusters
 KEEP = {"PPL", "PPLA", "PPLA2", "PPLA3", "PPLA4", "PPLA5", "PPLC", "PPLCH", "PPLF", "PPLG"}
+BAD_POP = {1821940}  # Takeo, Cambodia: GeoNames gives it the province population (844k); the town has ~40k
 
 countries = {}
 for line in open(os.path.join(D, "countryInfo.txt"), encoding="utf-8"):
@@ -22,12 +26,17 @@ for line in open(os.path.join(D, "admin1CodesASCII.txt"), encoding="utf-8"):
     admin1[f[0]] = f[1]
 
 rows, small = [], []
-for line in open(os.path.join(D, "cities15000.txt"), encoding="utf-8"):
+for line in open(os.path.join(D, "cities500.txt"), encoding="utf-8"):
     f = line.rstrip("\n").split("\t")
     pop = int(f[14] or 0)
     if f[7] not in KEEP: continue
+    # districts that GeoNames files as cities: Hong Kong's and Macau's district seats, and the districts of China's
+    # four municipalities (Beijing 22, Shanghai 23, Tianjin 28, Chongqing 33), which only count as the city itself
+    if f[8] in ("HK", "MO") and f[7] != "PPLC": continue
+    if f[8] == "CN" and f[10] in ("22", "23", "28", "33") and f[7] not in ("PPLA", "PPLC"): continue
+    if int(f[0]) in BAD_POP: continue
     names = {f[1].lower(), f[2].lower(), *(a.lower() for a in f[3].split(","))}
-    (rows if pop >= MIN_POP else small).append({"name": f[1], "names": names, "lat": float(f[4]), "lon": float(f[5]), "cc": f[8],
+    (rows if pop >= MIN_POP else small).append({"id": int(f[0]), "fc": f[7], "name": f[1], "names": names, "lat": float(f[4]), "lon": float(f[5]), "cc": f[8],
                  "country": countries.get(f[8], f[8]), "region": admin1.get(f[8] + "." + f[10], ""), "pop": pop})
 
 def km(a, b):
@@ -53,7 +62,27 @@ for name, country, lat, lon, note in curated:
         near = min(small, key=lambda r: km(r, c))
         pop = near["pop"] if km(near, c) <= 40 else 15_000
         print("under 100k, kept:", name, country, pop)
-        rows.append({"name": name, "lat": lat, "lon": lon, "cc": near["cc"], "country": country, "region": "", "pop": pop, "note": note, "curated": True})
+        rows.append({"id": -len(rows), "fc": "PPL", "name": name, "names": {name.lower()}, "lat": lat, "lon": lon, "cc": near["cc"], "country": country, "region": "", "pop": pop, "note": note, "curated": True})
+
+# ---- the notable subset ----
+ALWAYS_CAPITALS = {"US", "CA", "AU", "IN", "BR"}
+notable = {r["id"] for r in rows if r["pop"] >= 1_000_000 or r["fc"] == "PPLC" or r.get("curated")
+           or (r["fc"] == "PPLA" and (r["pop"] >= 400_000 or r["cc"] in ALWAYS_CAPITALS))}
+notable |= {r["id"] for r in small if r["fc"] == "PPLC" or (r["fc"] == "PPLA" and r["cc"] in ALWAYS_CAPITALS)}
+byid = {r["id"]: r for r in rows + small}
+extra = []
+for entry in json.load(open(os.path.join(ROOT, "data", "notable.json"), encoding="utf-8")):
+    name, cc = entry[0], entry[1]
+    if len(entry) > 2:  # a place given with coordinates: not a GeoNames city, or one whose GeoNames name differs
+        lat, lon, note = entry[2], entry[3], entry[4]
+        extra.append({"name": name, "lat": lat, "lon": lon, "cc": cc, "country": countries.get(cc, cc), "region": "", "pop": 0, "note": note})
+        continue
+    cands = [r for r in rows + small if r["cc"] == cc and name.lower() in r["names"]]
+    if not cands:
+        print("notable.json: no GeoNames match for", name, cc); continue
+    best = max(cands, key=lambda r: r["pop"])
+    notable.add(best["id"])
+    if not best.get("curated"): best["name"] = name  # keep the familiar spelling
 
 def popnote(p):
     if p >= 1_000_000: return f"Home to about {p/1e6:.1f} million people."
@@ -61,19 +90,34 @@ def popnote(p):
 
 # the state/province/oblast goes in the country line for these big countries always, and elsewhere for ambiguous names
 ALWAYS_REGION = {"CN", "RU", "BR", "IN", "AU", "ID"}
-dupes = {n for n, k in Counter(r["name"] for r in rows).items() if k > 1}
-out = []
-for r in sorted(rows, key=lambda r: -r["pop"]):
+def emit(rows):
+  dupes = {n for n, k in Counter(r["name"] for r in rows).items() if k > 1}
+  out = []
+  for r in sorted(rows, key=lambda r: -r["pop"]):
     country = r["country"]
     # municipalities whose region is their own name still show it there ("Beijing, Beijing, China"), except for
     # ambiguous names outside those countries, where it would add nothing
     if r["region"] and (r["cc"] in ALWAYS_REGION or (r["name"] in dupes and r["region"] != r["name"])):
         country = f"{r['region']}, {country}"
-    out.append([r["name"], country, round(r["lat"], 3), round(r["lon"], 3), r.get("note") or popnote(r["pop"]), r["pop"]])
+    note = r.get("note")
+    if not note:
+        people = popnote(r["pop"])
+        if r.get("fc") == "PPLC": note = f"Capital of {r['country']}. " + people
+        elif r.get("fc") == "PPLA" and r["region"] and r["region"] != r["name"]: note = f"Capital of {r['region']}. " + people
+        else: note = people
+    out.append([r["name"], country, round(r["lat"], 3), round(r["lon"], 3), note, r["pop"]])
+  return out
 
-with open(os.path.join(ROOT, "cities.js"), "w", encoding="utf-8") as f:
-    f.write("// generated by tools/build_cities.py from GeoNames cities15000 (CC BY 4.0): every city with population >= %d\n" % MIN_POP)
-    f.write("// [name, country, lat, lon, note, population]\nconst CITIES = [\n")
-    f.write(",\n".join(json.dumps(o, ensure_ascii=False) for o in out))
-    f.write("\n];\n")
-print(f"{len(out)} cities ({len(curated)} curated, {unmatched} curated with no GeoNames match), {len(dupes)} ambiguous names")
+def write(path, out, what):
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("// generated by tools/build_cities.py from GeoNames (CC BY 4.0): %s\n" % what)
+        f.write("// [name, country, lat, lon, note, population]\nconst CITIES = [\n")
+        f.write(",\n".join(json.dumps(o, ensure_ascii=False) for o in out))
+        f.write("\n];\n")
+
+os.makedirs(os.path.join(ROOT, "data"), exist_ok=True)
+all_out = emit(rows)
+write(os.path.join(ROOT, "data", "cities_100k.js"), all_out, "every city with population >= %d" % MIN_POP)
+notable_rows = [byid[i] for i in notable] + extra
+write(os.path.join(ROOT, "cities.js"), emit(notable_rows), "the notable cities (see tools/build_cities.py for the rules)")
+print(f"{len(all_out)} cities over {MIN_POP:,}; {len(notable_rows)} notable ({len(extra)} given by coordinates)")

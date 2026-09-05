@@ -338,13 +338,14 @@ const atmo = new THREE.Mesh(new THREE.SphereGeometry(R*1.035, 64, 48), new THREE
 scene.add(atmo);
 
 const markers = new THREE.Group(); earth.add(markers);
+// A dot and a pulsing ring lying flat on the surface, centred on the point. (An upright pin with a raised head
+// leans away from its base in perspective, so the head never sat where you tapped.)
 function makePin(color, r=0.014){
   const g=new THREE.Group();
-  const head=new THREE.Mesh(new THREE.SphereGeometry(r,20,16), new THREE.MeshBasicMaterial({color}));
+  const dot=new THREE.Mesh(new THREE.CircleGeometry(r,32), new THREE.MeshBasicMaterial({color,side:THREE.DoubleSide}));
   const ring=new THREE.Mesh(new THREE.RingGeometry(r*1.6,r*2.1,40), new THREE.MeshBasicMaterial({color,transparent:true,opacity:.55,side:THREE.DoubleSide}));
-  const stem=new THREE.Mesh(new THREE.CylinderGeometry(0.003,0.003,0.05,8), new THREE.MeshBasicMaterial({color}));
-  stem.position.y=0.025; head.position.y=0.05; ring.rotation.x=-Math.PI/2; ring.position.y=0.002;
-  g.add(stem,head,ring); return g;
+  dot.rotation.x=-Math.PI/2; dot.position.y=0.003; ring.rotation.x=-Math.PI/2; ring.position.y=0.002;
+  g.add(dot,ring); return g;
 }
 function placePin(pin, lat, lon){
   const p=latLonToVec3(lat,lon,R*1.004);
@@ -432,25 +433,36 @@ function flyTo(lat, lon, dist){
 const ray=new THREE.Raycaster();
 function screenToNdc(x,y){ const r=canvas.getBoundingClientRect(); return new THREE.Vector2(((x-r.left)/r.width)*2-1, -((y-r.top)/r.height)*2+1); }
 function hitGlobe(x,y){ ray.setFromCamera(screenToNdc(x,y),camera); const h=ray.intersectObject(globe)[0]; return h ? vec3ToLatLon(earth.worldToLocal(h.point.clone())) : null; }
-// Direction (world space, unit) of the surface point under the pointer; off the globe, the nearest point on the limb
-function surfaceDir(x,y){
+// What the pointer is "holding" on the globe: a unit direction (world space) plus the geometry needed to keep a drag
+// going off the globe. Inside 80% of the disc that is the surface point under the pointer. Grabbing the true surface
+// out to the limb makes the turn rate blow up at the edge and stop dead beyond it, so past that radius the grab angle
+// keeps growing at the rate it had at 80%: the same response continues smoothly over the horizon and off the globe.
+// The angle is capped short of the far pole; beyond the cap dragTo adds the radial motion directly, so it never stalls.
+const GRAB_RHO0=0.8, GRAB_SLOPE=1/Math.sqrt(1-GRAB_RHO0*GRAB_RHO0), GRAB_AMAX=2.6;
+const GRAB_RHOCAP=GRAB_RHO0+(GRAB_AMAX-Math.asin(GRAB_RHO0))/GRAB_SLOPE; // radius where the cap starts
+function grabAt(x,y){
   ray.setFromCamera(screenToNdc(x,y),camera);
-  const h=ray.intersectObject(globe)[0];
-  if(h) return h.point.clone().normalize();
   const o=ray.ray.origin, d=ray.ray.direction; const tc=-o.dot(d);
-  return o.clone().add(d.clone().multiplyScalar(tc)).normalize();
+  const q=o.clone().add(d.clone().multiplyScalar(tc)); const rho=q.length()/R; // ray's closest approach to the centre
+  const a = rho<=GRAB_RHO0 ? Math.asin(rho) : Math.min(GRAB_AMAX, Math.asin(GRAB_RHO0)+(rho-GRAB_RHO0)*GRAB_SLOPE);
+  const qh=q.normalize(); // radial direction in the view plane (zero vector at the exact centre, which is harmless)
+  const dir=qh.clone().multiplyScalar(Math.sin(a)).sub(d.clone().multiplyScalar(Math.cos(a))).normalize();
+  const n=d.clone().negate().cross(qh).normalize(); // axis that tilts the grab point further outward
+  return {dir, rho, n, capped: a>=GRAB_AMAX};
 }
+function surfaceDir(x,y){ return grabAt(x,y).dir; }
 
 const pointers=new Map(); let dragging=false, autoSpin=true;
-let downPos=null, maxMove=0, grabDir=null, lastPinch=0, lastCentroid=null;
+let downPos=null, maxMove=0, grabDir=null, grab=null, lastPinch=0, lastCentroid=null;
 let spin={axis:new THREE.Vector3(0,1,0), rate:0}, lastMoveT=0;
    // inertia: rate in rad/ms around a world axis
 
 function dragTo(x,y,prev){
   const now=performance.now(), dt=Math.max(8,now-lastMoveT); lastMoveT=now;
-  const dir=surfaceDir(x,y);
+  const g=grabAt(x,y), dir=g.dir;
   if(grabDir){
     let q=new THREE.Quaternion().setFromUnitVectors(grabDir,dir);
+    if(g.capped && grab) q.premultiply(new THREE.Quaternion().setFromAxisAngle(g.n, GRAB_SLOPE*(g.rho-Math.max(grab.rho,GRAB_RHOCAP)))); // radial motion beyond the cap
     let ang=2*Math.acos(Math.min(1,Math.abs(q.w)));
     const MAXA=0.35; // cap one event at 20°: a very fast swipe can't produce a wild flip
     if(ang>MAXA){ q=new THREE.Quaternion().slerp(q, MAXA/ang); ang=MAXA; }
@@ -460,7 +472,7 @@ function dragTo(x,y,prev){
       spin.axis.lerp(axis, 0.5).normalize(); spin.rate=spin.rate*0.5+rate*0.5; }
     else spin.rate*=0.5;
   } else { applyDrag(x-prev.x,y-prev.y); spin.rate=0; }
-  grabDir=dir;
+  grabDir=dir; grab=g;
 }
 
 canvas.addEventListener('pointerdown',e=>{
@@ -469,8 +481,8 @@ canvas.addEventListener('pointerdown',e=>{
   try{ canvas.setPointerCapture(e.pointerId); }catch(_){}
   pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
   tween=null; autoSpin=false; spin.rate=0; dragging=true; canvas.classList.add('dragging');
-  if(pointers.size===1){ downPos={x:e.clientX,y:e.clientY}; maxMove=0; grabDir=surfaceDir(e.clientX,e.clientY); lastMoveT=performance.now(); }
-  else { grabDir=null; maxMove=99; lastPinch=0; lastCentroid=null; }
+  if(pointers.size===1){ downPos={x:e.clientX,y:e.clientY}; maxMove=0; grab=grabAt(e.clientX,e.clientY); grabDir=grab.dir; lastMoveT=performance.now(); }
+  else { grabDir=null; grab=null; maxMove=99; lastPinch=0; lastCentroid=null; }
 });
 canvas.addEventListener('pointermove',e=>{
   if(!pointers.has(e.pointerId)) return;
@@ -487,12 +499,12 @@ canvas.addEventListener('pointermove',e=>{
 function endPointer(e){
   if(!pointers.has(e.pointerId)) return;
   pointers.delete(e.pointerId); lastPinch=0; lastCentroid=null;
-  if(pointers.size===1){ const rest=[...pointers.values()][0]; grabDir=surfaceDir(rest.x,rest.y); maxMove=99; downPos=null; }
+  if(pointers.size===1){ const rest=[...pointers.values()][0]; grab=grabAt(rest.x,rest.y); grabDir=grab.dir; maxMove=99; downPos=null; }
   if(pointers.size===0){
     dragging=false; canvas.classList.remove('dragging');
-    if(downPos && maxMove<8 && e.type==='pointerup'){ spin.rate=0; tapAt(e.clientX,e.clientY); }
+    if(downPos && maxMove<8 && e.type==='pointerup'){ spin.rate=0; tapAt(downPos.x,downPos.y); } // where the finger landed, not where it lifted
     else if(performance.now()-lastMoveT>80){ spin.rate=0; } // finger paused before lifting: no fling
-    downPos=null; grabDir=null;
+    downPos=null; grabDir=null; grab=null;
   }
 }
 canvas.addEventListener('pointerup',endPointer); canvas.addEventListener('pointercancel',endPointer);
@@ -537,7 +549,7 @@ function start(mode){
   ui.modeline.textContent=modeLabel(); ui.sheet.classList.remove('open');
   clearMarks(); ui.score.textContent='0';
   const saved = mode==='daily' && store.get('nightfall:'+dateKey(new Date()));
-  if(saved){ state.results=saved; state.round=5; showSheet(true); ui.prompt.hidden=true; setTimeout(()=>{ placeFab(); recenter(); },50); return; }
+  if(saved){ state.results=saved; state.round=5; showSheet(true); ui.prompt.hidden=true; setTimeout(recenter,50); return; }
   ui.prompt.hidden=false;
   showRound();
 }
@@ -593,10 +605,7 @@ ui.copy.addEventListener('click',async()=>{
   try{ await navigator.clipboard.writeText(text); toast('Copied to clipboard'); }catch(e){ toast('Copy blocked — select the table instead'); }
 });
 ui.replay.addEventListener('click',()=>start('practice'));
-document.getElementById('recenter').addEventListener('click',recenter);
-function placeFab(){ const pr=ui.prompt.getBoundingClientRect(); const shown=!ui.prompt.hidden && pr.height>0; document.documentElement.style.setProperty('--fab-bottom', shown ? (innerHeight-pr.top+10)+'px' : '14px'); }
-if(window.ResizeObserver) new ResizeObserver(placeFab).observe(ui.prompt); addEventListener('resize',placeFab);
-ui.close.addEventListener('click',()=>{ ui.sheet.classList.remove('open'); ui.prompt.hidden = state.mode==='daily' && state.round>=5; setTimeout(()=>{ placeFab(); recenter(); },50); });
+ui.close.addEventListener('click',()=>{ ui.sheet.classList.remove('open'); ui.prompt.hidden = state.mode==='daily' && state.round>=5; setTimeout(recenter,50); });
 ui.mDaily.addEventListener('click',()=>start('daily'));
 ui.mPractice.addEventListener('click',()=>start('practice'));
 function toast(msg){ ui.toast.textContent=msg; ui.toast.classList.add('show'); setTimeout(()=>ui.toast.classList.remove('show'),1600); }
@@ -608,7 +617,7 @@ function frame(now){
   else if(!dragging && spin.rate>1e-6){ rotateBy(spin.axis, Math.min(0.25, spin.rate*16)); levelNorth(0.5); spin.rate*=0.93; if(spin.rate<2e-5) spin.rate=0; }
   else if(autoSpin && !dragging){ rotateBy(Y_AXIS, 0.0008); }
   // pulse rings
-  const s=1+0.12*Math.sin(now/300); const ps=Math.max(0.3,Math.min(1,(camDist-1)/(FIT_D-1))); [guessPin,truthPin].forEach(p=>{ if(p.visible){ p.scale.setScalar(ps); p.children[2].scale.set(s,s,1);} });
+  const s=1+0.12*Math.sin(now/300); const ps=Math.max(0.3,Math.min(1,(camDist-1)/(FIT_D-1))); [guessPin,truthPin].forEach(p=>{ if(p.visible){ p.scale.setScalar(ps); p.children[1].scale.set(s,s,1);} });
   // tag position
   if(truthPin.visible){
     const v=truthPin.getWorldPosition(new THREE.Vector3()); const facing = v.clone().normalize().z>0.15;
@@ -619,4 +628,4 @@ function frame(now){
   renderer.render(scene,camera); requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
-start('daily'); placeFab();
+start('daily');

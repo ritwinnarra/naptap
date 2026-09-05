@@ -54,12 +54,14 @@ def popnote(p):
     return f"Home to about {round(p, -3):,} people."
 
 # the state/province/oblast goes in the country line for these big countries always, and elsewhere for ambiguous names
-ALWAYS_REGION = {"CN", "RU", "BR", "IN", "AU"}
+ALWAYS_REGION = {"CN", "RU", "BR", "IN", "AU", "ID"}
 dupes = {n for n, k in Counter(r["name"] for r in rows).items() if k > 1}
 out = []
 for r in sorted(rows, key=lambda r: -r["pop"]):
     country = r["country"]
-    if (r["cc"] in ALWAYS_REGION or r["name"] in dupes) and r["region"] and r["region"] != r["name"]:
+    # municipalities whose region is their own name still show it there ("Beijing, Beijing, China"), except for
+    # ambiguous names outside those countries, where it would add nothing
+    if r["region"] and (r["cc"] in ALWAYS_REGION or (r["name"] in dupes and r["region"] != r["name"])):
         country = f"{r['region']}, {country}"
     out.append([r["name"], country, round(r["lat"], 3), round(r["lon"], 3), r.get("note") or popnote(r["pop"]), r["pop"]])
 

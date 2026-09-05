@@ -455,11 +455,22 @@ function grabAt(x,y){
   const q=o.clone().add(d.clone().multiplyScalar(tc)); const rho=q.length()/R; // ray's closest approach to the centre
   const a = rho<=GRAB_RHO0 ? Math.asin(rho) : Math.min(GRAB_AMAX, Math.asin(GRAB_RHO0)+(rho-GRAB_RHO0)*GRAB_SLOPE);
   const qh=q.normalize(); // radial direction in the view plane (zero vector at the exact centre, which is harmless)
-  const dir=qh.clone().multiplyScalar(Math.sin(a)).sub(d.clone().multiplyScalar(Math.cos(a))).normalize();
+  const dirAt=a=>qh.clone().multiplyScalar(Math.sin(a)).sub(d.clone().multiplyScalar(Math.cos(a))).normalize();
   const n=d.clone().negate().cross(qh).normalize(); // axis that tilts the grab point further outward
-  return {dir, rho, n, capped: a>=GRAB_AMAX};
+  // dir: the eased grab direction used for dragging. hit: the exact surface point when the pointer is on the globe.
+  return {dir:dirAt(a), hit: rho<=1 ? dirAt(Math.asin(rho)) : null, rho, n, capped: a>=GRAB_AMAX};
 }
 function surfaceDir(x,y){ return grabAt(x,y).dir; }
+// Zoom by a factor while keeping the point under (x,y) fixed on screen, as a map does: note what the pointer is over,
+// move the camera, then turn the globe so that point is back under the pointer. Levelling north afterwards adds a
+// little roll about the screen centre, so anchor once more to take that back out.
+function zoomAt(x,y,factor){
+  const g0=grabAt(x,y); const held=(g0.hit||g0.dir).applyQuaternion(earth.quaternion.clone().invert()); // in globe coordinates
+  camDist*=factor; updateCamera(); camera.updateMatrixWorld();
+  const g1=grabAt(x,y); const target=g1.hit||g1.dir;
+  const anchor=()=>earth.quaternion.premultiply(new THREE.Quaternion().setFromUnitVectors(held.clone().applyQuaternion(earth.quaternion), target));
+  anchor(); levelNorth(); anchor();
+}
 
 const pointers=new Map(); let dragging=false, autoSpin=true;
 let downPos=null, maxMove=0, grabDir=null, grab=null, lastPinch=0, lastCentroid=null;
@@ -500,7 +511,7 @@ canvas.addEventListener('pointermove',e=>{
   if(pointers.size===1){ dragTo(e.clientX,e.clientY,prev); }
   else if(pointers.size===2){
     const [a,b]=[...pointers.values()]; const d=Math.hypot(a.x-b.x,a.y-b.y); const c={x:(a.x+b.x)/2,y:(a.y+b.y)/2};
-    if(lastPinch){ camDist*=lastPinch/d; updateCamera(); }
+    if(lastPinch){ zoomAt(c.x,c.y,lastPinch/d); }
     if(lastCentroid){ applyDrag(c.x-lastCentroid.x,c.y-lastCentroid.y); }
     lastPinch=d; lastCentroid=c;
   }
@@ -523,7 +534,7 @@ canvas.addEventListener('contextmenu',e=>e.preventDefault());
 canvas.addEventListener('wheel',e=>{
   e.preventDefault(); autoSpin=false; tween=null;
   const d = e.deltaMode===1 ? e.deltaY*16 : e.deltaMode===2 ? e.deltaY*400 : e.deltaY;
-  camDist*=Math.exp(Math.max(-60,Math.min(60,d))*0.0025); updateCamera();
+  zoomAt(e.clientX,e.clientY,Math.exp(Math.max(-60,Math.min(60,d))*0.0025));
 },{passive:false});
 addEventListener('keydown',e=>{
   if(e.target && /INPUT|TEXTAREA|BUTTON/.test(e.target.tagName)) return;

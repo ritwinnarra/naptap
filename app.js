@@ -301,7 +301,11 @@ function updateLayer(L){
   if(camDist>L.maxDist) { // layer not needed at this zoom: drop everything
     L.items.forEach(it=>{ if(it.mesh) unloadItem(L,it); }); return;
   }
-  const vc=viewCentreDir(), vis=Math.acos(1/camDist); // angular radius of the visible disc
+  // angular radius of the area worth loading: the horizon, or when zoomed in, the screen's diagonal (with slack for
+  // the view offset and the surface curving away at the edges)
+  const vc=viewCentreDir();
+  const halfDiag=(camDist-1)*Math.tan(camera.fov/2*DEG)*Math.sqrt(1+camera.aspect*camera.aspect);
+  const vis=Math.min(Math.acos(1/camDist), Math.asin(Math.min(1,halfDiag))*1.6);
   let resident=0; const wanted=[];
   for(const it of L.items){
     const a=it.c.angleTo(vc);
@@ -319,7 +323,7 @@ if(renderer.capabilities.maxTextureSize>=2048 && HI_TILES.length===32){
   const items=[]; for(let j=0;j<4;j++) for(let i=0;i<8;i++) items.push({lon0:-180+i*45, lon1:-135+i*45, lat0:90-(j+1)*45, lat1:90-j*45, src:HI_TILES[j*8+i]});
   layers.push(makeLayer(hiShell, items, R*1.0015, 24, {maxDist:99, loadPad:0.15, unloadPad:0.6, cap:16}));
   layers.push(makeLayer(detail, Z7.map(z=>({lon0:z[0],lon1:z[1],lat0:z[2],lat1:z[3],src:z[4]})), R*1.0025, 10, {maxDist:2.6, loadPad:0.08, unloadPad:0.35, cap:70}));
-  layers.push(makeLayer(fine, Z8.map(z=>({lon0:z[0],lon1:z[1],lat0:z[2],lat1:z[3],src:z[4]})), R*1.0035, 6, {maxDist:1.6, loadPad:0.03, unloadPad:0.18, cap:48}));
+  layers.push(makeLayer(fine, Z8.map(z=>({lon0:z[0],lon1:z[1],lat0:z[2],lat1:z[3],src:z[4]})), R*1.0035, 6, {maxDist:1.35, loadPad:0.03, unloadPad:0.18, cap:48}));
 }
 let lastLayerT=0;
 function tickLayers(now){ if(now-lastLayerT<250) return; lastLayerT=now; layers.forEach(updateLayer); }

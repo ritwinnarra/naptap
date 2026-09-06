@@ -14,7 +14,7 @@ The game draws from `cities.js`, about 1,360 notable places, built from the [Geo
 - one of the 200 or so cities in `data/curated.json`, which carry hand-written facts
 - listed in `data/notable.json`: places that are famous out of proportion to their size, from Oakland and Lake Tahoe to Petra and Tirumala. Most are looked up in GeoNames by name; a few dozen that aren't cities at all are given with coordinates.
 
-Picks are weighted by population^(2/3), with a floor of 300k so the small famous places still come up.
+Picks are weighted by population, with a floor of 300k so the small famous places still come up.
 
 The full list of every city over 100k (5,854 of them) is kept in `data/cities_100k.js` with the same format. To use it instead, point the script tag in `index.html` at it.
 

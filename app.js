@@ -30,9 +30,9 @@ function haversine(a, b){
 function pointsFor(km){ return Math.round(1000*Math.exp(-km/1500)); }
 function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
 function seedFromDate(d){ return d.getFullYear()*10000 + (d.getMonth()+1)*100 + d.getDate(); }
-// Five distinct cities, each drawn with probability proportional to population^(2/3).
+// Five distinct cities, each drawn with probability proportional to population.
 // Small but famous places (capitals, resorts, ruins) get a floor so they still come up now and then.
-const CITY_WEIGHT = CITIES.map(c=>Math.pow(Math.max(c[5]||0, 300000), 2/3));
+const CITY_WEIGHT = CITIES.map(c=>Math.max(c[5]||0, 300000));
 function pickFive(seed){
   const rnd = mulberry32(seed*2654435761 % 2**31);
   const w = CITY_WEIGHT.slice(); let total = w.reduce((s,x)=>s+x, 0);

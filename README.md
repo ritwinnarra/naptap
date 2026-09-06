@@ -18,7 +18,7 @@ Picks are weighted by population, with a floor of 300k so the small famous place
 
 The full list of every city over 100k (5,854 of them) is kept in `data/cities_100k.js` with the same format. To use it instead, point the script tag in `index.html` at it.
 
-Boroughs and districts of larger cities are excluded. Cities in China, Russia, India, Brazil, Australia and Indonesia show their province or state, and so does any city that shares its name with another. Rebuild with
+Boroughs and districts of larger cities are excluded. Cities in the US, China, Russia, India, Brazil, Australia and Indonesia show their state or province, and so does any city that shares its name with another. Rebuild with
 
     python3 tools/build_cities.py <dir with cities15000.txt, cities500.txt, countryInfo.txt, admin1CodesASCII.txt>
 

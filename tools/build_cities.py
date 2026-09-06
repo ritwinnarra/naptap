@@ -89,7 +89,7 @@ def popnote(p):
     return f"Home to about {round(p, -3):,} people."
 
 # the state/province/oblast goes in the country line for these big countries always, and elsewhere for ambiguous names
-ALWAYS_REGION = {"CN", "RU", "BR", "IN", "AU", "ID"}
+ALWAYS_REGION = {"US", "CN", "RU", "BR", "IN", "AU", "ID"}
 def emit(rows):
   dupes = {n for n, k in Counter(r["name"] for r in rows).items() if k > 1}
   out = []

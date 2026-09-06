@@ -75,7 +75,8 @@ for entry in json.load(open(os.path.join(ROOT, "data", "notable.json"), encoding
     name, cc = entry[0], entry[1]
     if len(entry) > 2:  # a place given with coordinates: not a GeoNames city, or one whose GeoNames name differs
         lat, lon, note = entry[2], entry[3], entry[4]
-        extra.append({"name": name, "lat": lat, "lon": lon, "cc": cc, "country": countries.get(cc, cc), "region": "", "pop": 0, "note": note})
+        region = entry[5] if len(entry) > 5 else ""
+        extra.append({"name": name, "lat": lat, "lon": lon, "cc": cc, "country": countries.get(cc, cc), "region": region, "pop": 0, "note": note})
         continue
     cands = [r for r in rows + small if r["cc"] == cc and name.lower() in r["names"]]
     if not cands:

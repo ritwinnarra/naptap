@@ -60,7 +60,8 @@
 "US",
 39.092,
 -120.032,
-"An alpine lake on the California-Nevada border, 1,900 m up in the Sierra Nevada and the second deepest in the US."
+"An alpine lake on the California-Nevada border, 1,900 m up in the Sierra Nevada and the second deepest in the US.",
+"California"
 ],
 [
 "Reno",
@@ -115,7 +116,8 @@
 "US",
 36.055,
 -112.14,
-"The Colorado River has cut this gorge 1.8 km deep over some six million years."
+"The Colorado River has cut this gorge 1.8 km deep over some six million years.",
+"Arizona"
 ],
 [
 "Boulder",
@@ -138,21 +140,24 @@
 "US",
 43.48,
 -110.762,
-"A valley below the Tetons in Wyoming, gateway to Yellowstone and Grand Teton national parks."
+"A valley below the Tetons in Wyoming, gateway to Yellowstone and Grand Teton national parks.",
+"Wyoming"
 ],
 [
 "Yellowstone",
 "US",
 44.46,
 -110.828,
-"The world's first national park (1872), sitting on a supervolcano that powers Old Faithful."
+"The world's first national park (1872), sitting on a supervolcano that powers Old Faithful.",
+"Wyoming"
 ],
 [
 "Yosemite",
 "US",
 37.746,
 -119.593,
-"Granite cliffs and waterfalls in the Sierra Nevada; Half Dome rises 1,400 m above the valley floor."
+"Granite cliffs and waterfalls in the Sierra Nevada; Half Dome rises 1,400 m above the valley floor.",
+"California"
 ],
 [
 "Missoula",
@@ -167,7 +172,8 @@
 "US",
 43.697,
 -114.352,
-"America's first destination ski resort, opened in 1936 in Idaho's Wood River valley."
+"America's first destination ski resort, opened in 1936 in Idaho's Wood River valley.",
+"Idaho"
 ],
 [
 "Omaha",
@@ -338,7 +344,8 @@
 "US",
 43.661,
 -70.255,
-"Maine's largest city, a working harbour on Casco Bay."
+"Maine's largest city, a working harbour on Casco Bay.",
+"Maine"
 ],
 [
 "Niagara Falls",
@@ -397,7 +404,8 @@
 "CA",
 58.768,
 -94.165,
-"On Hudson Bay, the polar bear capital of the world."
+"On Hudson Bay, the polar bear capital of the world.",
+"Manitoba"
 ],
 [
 "Cancún",
@@ -1088,14 +1096,16 @@
 "IN",
 15.499,
 73.828,
-"Panaji, capital of India's smallest state, a Portuguese colony for 450 years."
+"Panaji, capital of India's smallest state, a Portuguese colony for 450 years.",
+"Goa"
 ],
 [
 "Tirumala",
 "IN",
 13.683,
 79.347,
-"Hilltop temple town above Tirupati; the Venkateswara temple is among the most visited places of worship on Earth."
+"Hilltop temple town above Tirupati; the Venkateswara temple is among the most visited places of worship on Earth.",
+"Andhra Pradesh"
 ],
 [
 "Tirupati",
@@ -1178,7 +1188,8 @@
 "IN",
 15.335,
 76.46,
-"Ruins of Vijayanagara, capital of a Hindu empire that was among the largest cities in the world around 1500."
+"Ruins of Vijayanagara, capital of a Hindu empire that was among the largest cities in the world around 1500.",
+"Karnataka"
 ],
 [
 "Pokhara",
@@ -1435,7 +1446,8 @@
 "AU",
 -25.345,
 131.036,
-"A sandstone monolith 350 m high in the centre of Australia, sacred to the Anangu."
+"A sandstone monolith 350 m high in the centre of Australia, sacred to the Anangu.",
+"Northern Territory"
 ],
 [
 "Byron Bay",
